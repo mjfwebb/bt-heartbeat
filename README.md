@@ -24,6 +24,12 @@ the heartbeat stream stops.
 It follows the OS default output device automatically, so reconnecting or
 switching Bluetooth devices is handled without restarting the app.
 
+## Download
+
+Grab the latest self-contained `BTHeartbeat.exe` from the
+[Releases](https://github.com/mjfwebb/bt-heartbeat/releases) page — no
+.NET install required, just run it.
+
 ## Build & run
 
 Requires .NET 9 SDK.
