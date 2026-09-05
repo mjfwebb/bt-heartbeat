@@ -57,7 +57,8 @@ dotnet run
 ```
 
 Tray icon shows current status (hover for tooltip, right-click for menu).
-Right-click → Exit to quit.
+The menu has a "Start with Windows" toggle (registers the exe in the HKCU
+Run key) and Exit.
 
 ## Publish a standalone build
 
@@ -66,7 +67,8 @@ dotnet publish -c Release -r win-x64 --self-contained false -o publish
 ```
 
 Produces `publish/BTHeartbeat.exe`: no console window, tray icon only.
-Add a shortcut to it in `shell:startup` to run it on login.
+Run it once and tick "Start with Windows" in the tray menu to have it
+launch on login.
 
 ## Design notes
 
