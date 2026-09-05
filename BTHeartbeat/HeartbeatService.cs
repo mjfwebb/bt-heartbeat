@@ -17,7 +17,7 @@ namespace BTHeartbeat;
 /// to ever stop it is to let a headset idle when nobody is listening: if the
 /// endpoint meter reads silence for <see cref="IdleTimeout"/>, the heartbeat is
 /// released, and it restarts the moment the meter sees real audio again (that
-/// first resume may crackle once — an accepted trade-off for battery).
+/// first resume may crackle once, an accepted trade-off for battery).
 ///
 /// Design notes, because two earlier iterations leaked memory:
 ///  - Do NOT enumerate audio sessions on a timer. Each pass allocates a

@@ -14,8 +14,8 @@ internal static class Program
     {
         ApplicationConfiguration.Initialize();
 
-        // Install our own sync context rather than relying on SynchronizationContext.Current
-        // — NotifyIcon's window is a raw NativeWindow, not a Control, so it isn't
+        // Install our own sync context rather than relying on SynchronizationContext.Current.
+        // NotifyIcon's window is a raw NativeWindow, not a Control, so it isn't
         // guaranteed to auto-install one, and a null context here means every later
         // Post() silently no-ops, leaving the tray text stuck on "starting...".
         var uiContext = new WindowsFormsSynchronizationContext();
