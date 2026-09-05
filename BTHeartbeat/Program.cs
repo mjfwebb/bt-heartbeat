@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Threading;
 using System.Windows.Forms;
 
@@ -6,19 +7,24 @@ namespace BTHeartbeat;
 
 internal static class Program
 {
+    private static readonly TimeSpan DefaultIdleTimeout = TimeSpan.FromMinutes(15);
+
     [STAThread]
-    private static void Main()
+    private static void Main(string[] args)
     {
         ApplicationConfiguration.Initialize();
 
-        // Build our own sync context rather than relying on SynchronizationContext.Current
+        // Install our own sync context rather than relying on SynchronizationContext.Current
         // — NotifyIcon's window is a raw NativeWindow, not a Control, so it isn't
-        // guaranteed to auto-install one, and capturing a null context here means
-        // every later Post() below silently no-ops, leaving the tray text stuck
-        // on "starting...".
+        // guaranteed to auto-install one, and a null context here means every later
+        // Post() silently no-ops, leaving the tray text stuck on "starting...".
         var uiContext = new WindowsFormsSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(uiContext);
 
-        using var service = new HeartbeatService();
+        using var service = new HeartbeatService(ParseIdleTimeout(args))
+        {
+            DebugMeter = Array.Exists(args, a => a.Equals("--debug-meter", StringComparison.OrdinalIgnoreCase)),
+        };
         using var trayIcon = new NotifyIcon
         {
             Icon = System.Drawing.SystemIcons.Information,
@@ -48,6 +54,25 @@ internal static class Program
         service.Start();
 
         Application.Run();
+    }
+
+    /// <summary>
+    /// `--idle-timeout &lt;seconds&gt;` overrides how long the output must be silent before
+    /// the heartbeat is released to let a headset sleep. 0 disables the timeout
+    /// (heartbeat never releases). Defaults to 15 minutes.
+    /// </summary>
+    private static TimeSpan ParseIdleTimeout(string[] args)
+    {
+        for (int i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i].Equals("--idle-timeout", StringComparison.OrdinalIgnoreCase)
+                && double.TryParse(args[i + 1], NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds)
+                && seconds >= 0)
+            {
+                return seconds == 0 ? TimeSpan.MaxValue : TimeSpan.FromSeconds(seconds);
+            }
+        }
+        return DefaultIdleTimeout;
     }
 
     private static string Truncate(string s, int max) => s.Length <= max ? s : s[..max];
