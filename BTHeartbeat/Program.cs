@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.Threading;
 using System.Windows.Forms;
+using Microsoft.Win32;
 
 namespace BTHeartbeat;
 
@@ -34,10 +35,17 @@ internal static class Program
 
         var menu = new ContextMenuStrip();
         var statusItem = new ToolStripMenuItem("Status: starting...") { Enabled = false };
+        var startupItem = new ToolStripMenuItem("Start with Windows")
+        {
+            CheckOnClick = true,
+            Checked = IsStartupEnabled(),
+        };
+        startupItem.Click += (_, _) => SetStartup(startupItem.Checked);
         var exitItem = new ToolStripMenuItem("Exit");
         exitItem.Click += (_, _) => Application.Exit();
         menu.Items.Add(statusItem);
         menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(startupItem);
         menu.Items.Add(exitItem);
         trayIcon.ContextMenuStrip = menu;
 
@@ -76,4 +84,38 @@ internal static class Program
     }
 
     private static string Truncate(string s, int max) => s.Length <= max ? s : s[..max];
+
+    // ---- startup registration (HKCU Run key, same approach as the other tray apps)
+
+    private const string RunKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
+    private const string RunValue = "BTHeartbeat";
+
+    private static bool IsStartupEnabled()
+    {
+        try
+        {
+            using var k = Registry.CurrentUser.OpenSubKey(RunKey, writable: false);
+            return k?.GetValue(RunValue) != null;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static void SetStartup(bool enable)
+    {
+        try
+        {
+            using var k = Registry.CurrentUser.OpenSubKey(RunKey, writable: true);
+            if (k is null) return;
+            if (enable) k.SetValue(RunValue, $"\"{Application.ExecutablePath}\"");
+            else k.DeleteValue(RunValue, throwOnMissingValue: false);
+        }
+        catch
+        {
+            // Registry access denied or similar: leave the checkbox as the user set it;
+            // it will re-read the real state next launch.
+        }
+    }
 }
