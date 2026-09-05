@@ -1,7 +1,7 @@
 # BTHeartbeat
 
 Fixes Bluetooth audio crackle/pop on Windows that happens whenever audio stops
-and starts again — pausing/resuming Spotify, switching Twitch streams, any
+and starts again: pausing/resuming Spotify, switching Twitch streams, any
 gap between one app's audio and the next.
 
 ## Why this happens
@@ -22,7 +22,7 @@ nothing, so the stream just runs continuously.
 The one exception: if the output has been silent for a while (default 15
 minutes), the heartbeat is released so your headset can go to sleep instead
 of draining its battery all night. It restarts automatically the moment any
-audio plays again — that first resume may crackle once, everything after it
+audio plays again. That first resume may crackle once; everything after it
 is clean.
 
 It follows the OS default output device automatically, so reconnecting or
@@ -34,16 +34,16 @@ switching Bluetooth devices is handled without restarting the app.
 BTHeartbeat.exe [--idle-timeout <seconds>] [--debug-meter]
 ```
 
-- `--idle-timeout <seconds>` — how long the output must be silent before the
+- `--idle-timeout <seconds>`: how long the output must be silent before the
   heartbeat is released. `0` disables the release entirely (heartbeat runs
   as long as the app does). Default: `900` (15 minutes).
-- `--debug-meter` — log the raw endpoint meter reading on every tick to
+- `--debug-meter`: log the raw endpoint meter reading on every tick to
   stderr. Only useful under `dotnet run` when diagnosing idle detection.
 
 ## Download
 
 Grab the latest self-contained `BTHeartbeat.exe` from the
-[Releases](https://github.com/mjfwebb/bt-heartbeat/releases) page — no
+[Releases](https://github.com/mjfwebb/bt-heartbeat/releases) page. No
 .NET install required, just run it.
 
 ## Build & run
@@ -65,7 +65,7 @@ Right-click → Exit to quit.
 dotnet publish -c Release -r win-x64 --self-contained false -o publish
 ```
 
-Produces `publish/BTHeartbeat.exe` — no console window, tray icon only.
+Produces `publish/BTHeartbeat.exe`: no console window, tray icon only.
 Add a shortcut to it in `shell:startup` to run it on login.
 
 ## Design notes
