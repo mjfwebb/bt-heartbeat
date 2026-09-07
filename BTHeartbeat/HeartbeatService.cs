@@ -67,6 +67,9 @@ public sealed class HeartbeatService : IDisposable
     private MMDevice? _heartbeatDevice;
 
     private DateTime _lastRealAudioUtc = DateTime.UtcNow;
+    // Whether the current "cannot reach the default device" run has been reported.
+    // Cleared when a device binds, so a later disconnect reports again.
+    private bool _reportedNoDevice;
     private bool _idle;
     private bool _disposed;
 
@@ -111,8 +114,21 @@ public sealed class HeartbeatService : IDisposable
         {
             if (_boundDeviceId != null)
             {
+                // Lost the device we were bound to.
                 StopHeartbeat("no output device");
                 Rebind(null);
+                Report($"No default render device: {ex.Message}");
+                _reportedNoDevice = true;
+            }
+            else if (!_reportedNoDevice)
+            {
+                // Nothing has ever bound, so there is no heartbeat to tear down. Do
+                // still report it: returning silently here is how a broken WASAPI
+                // stack (a mis-trimmed build being the likely cause, see the
+                // PublishTrimmed note in the csproj) leaves the tray reading
+                // "starting..." forever, indistinguishable from a working build.
+                // Once only - the poll repeats every 2s and the message won't change.
+                _reportedNoDevice = true;
                 Report($"No default render device: {ex.Message}");
             }
             return;
@@ -128,6 +144,7 @@ public sealed class HeartbeatService : IDisposable
         // heartbeat bound to the old device and start fresh on the new one.
         StopHeartbeat("device changed");
         Rebind(device);
+        _reportedNoDevice = false;
         Report($"Watching device: {SafeFriendlyName(device)}");
         _lastRealAudioUtc = DateTime.UtcNow;
         _idle = false;

@@ -38,7 +38,9 @@ BTHeartbeat.exe [--idle-timeout <seconds>] [--debug-meter]
   heartbeat is released. `0` disables the release entirely (heartbeat runs
   as long as the app does). Default: `900` (15 minutes).
 - `--debug-meter`: log the raw endpoint meter reading on every tick to
-  stderr. Only useful under `dotnet run` when diagnosing idle detection.
+  stderr, for diagnosing idle detection. The published exe is a GUI binary
+  with no console attached, so this is only visible under `dotnet run` or
+  with stderr redirected: `BTHeartbeat.exe --debug-meter 2> log.txt`.
 
 ## Download
 
@@ -63,7 +65,7 @@ Run key) and Exit.
 ## Publish a standalone build
 
 ```
-dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o publish
+dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
 ```
 
 Produces `publish/BTHeartbeat.exe`: no console window, tray icon only,
@@ -75,8 +77,9 @@ The project sets `PublishTrimmed`, which is what keeps that number down
 source-generated COM interop. If the NAudio reference is ever moved back to
 2.x, trimming must come off with it: the 2.x trimmed build still starts and
 shows a tray icon, but every WASAPI call fails and no heartbeat runs. Check a
-trimmed build by running it with `--debug-meter` and confirming it logs
-"Heartbeat ON"; the process staying alive proves nothing on its own.
+trimmed build by hovering the tray icon: it must read "Heartbeat ON", not
+"starting..." or "No default render device". The process staying alive proves
+nothing on its own.
 
 ## Design notes
 
