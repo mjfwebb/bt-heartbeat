@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using System.Windows.Forms;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
 
@@ -29,10 +28,10 @@ namespace BTHeartbeat;
 ///    cached IAudioMeterInformation and checks a PlaybackState enum. That's it.
 ///  - COM objects are only created on rare transitions (start, device change,
 ///    idle release/resume), and each one has a single owner that disposes it.
-///  - All WASAPI calls happen on the STA UI thread via WinForms Timers. COM
-///    callbacks (session/device notifications) arrive on an MTA thread, and
-///    touching STA-created MMDevice/WasapiOut objects from there fails with
-///    E_NOINTERFACE, so we poll instead of subscribing.
+///  - All WASAPI calls happen on the STA UI thread via message-pump timers (see
+///    <see cref="ITimerScheduler"/>). COM callbacks (session/device notifications)
+///    arrive on an MTA thread, and touching STA-created MMDevice/WasapiOut objects
+///    from there fails with E_NOINTERFACE, so we poll instead of subscribing.
 /// </summary>
 public sealed class HeartbeatService : IDisposable
 {
@@ -53,8 +52,9 @@ public sealed class HeartbeatService : IDisposable
     private const float SilenceThreshold = 1e-4f;
 
     private readonly MMDeviceEnumerator _enumerator = new();
-    private readonly System.Windows.Forms.Timer _meterTimer;
-    private readonly System.Windows.Forms.Timer _deviceTimer;
+    private readonly ITimerScheduler _timers;
+    private IDisposable? _meterTimer;
+    private IDisposable? _deviceTimer;
 
     // Bound default device. Owns _meter; both replaced together on device change.
     private MMDevice? _device;
@@ -67,31 +67,29 @@ public sealed class HeartbeatService : IDisposable
     private MMDevice? _heartbeatDevice;
 
     private DateTime _lastRealAudioUtc = DateTime.UtcNow;
+    // Whether the current "cannot reach the default device" run has been reported.
+    // Cleared when a device binds, so a later disconnect reports again.
+    private bool _reportedNoDevice;
     private bool _idle;
     private bool _disposed;
 
-    public HeartbeatService(TimeSpan idleTimeout)
+    public HeartbeatService(ITimerScheduler timers, TimeSpan idleTimeout)
     {
+        _timers = timers;
         IdleTimeout = idleTimeout;
-
-        _meterTimer = new System.Windows.Forms.Timer { Interval = MeterPollIntervalMs };
-        _meterTimer.Tick += (_, _) => Guard(PollMeter, "meter poll");
-
-        _deviceTimer = new System.Windows.Forms.Timer { Interval = DevicePollIntervalMs };
-        _deviceTimer.Tick += (_, _) => Guard(PollDevice, "device poll");
     }
 
     public void Start()
     {
         Guard(PollDevice, "device poll");
-        _meterTimer.Start();
-        _deviceTimer.Start();
+        _meterTimer = _timers.Schedule(MeterPollIntervalMs, () => Guard(PollMeter, "meter poll"));
+        _deviceTimer = _timers.Schedule(DevicePollIntervalMs, () => Guard(PollDevice, "device poll"));
     }
 
     /// <summary>
-    /// An unhandled exception inside a WinForms Timer.Tick surfaces as the
-    /// ThreadException dialog and leaves the app dead in the tray. Everything the
-    /// timers run goes through here so a transient WASAPI failure is just a status line.
+    /// An unhandled exception on a timer tick would unwind into the Win32 message
+    /// dispatcher and leave the app dead in the tray. Everything the timers run goes
+    /// through here so a transient WASAPI failure is just a status line.
     /// </summary>
     private void Guard(Action action, string what)
     {
@@ -116,8 +114,21 @@ public sealed class HeartbeatService : IDisposable
         {
             if (_boundDeviceId != null)
             {
+                // Lost the device we were bound to.
                 StopHeartbeat("no output device");
                 Rebind(null);
+                Report($"No default render device: {ex.Message}");
+                _reportedNoDevice = true;
+            }
+            else if (!_reportedNoDevice)
+            {
+                // Nothing has ever bound, so there is no heartbeat to tear down. Do
+                // still report it: returning silently here is how a broken WASAPI
+                // stack (a mis-trimmed build being the likely cause, see the
+                // PublishTrimmed note in the csproj) leaves the tray reading
+                // "starting..." forever, indistinguishable from a working build.
+                // Once only - the poll repeats every 2s and the message won't change.
+                _reportedNoDevice = true;
                 Report($"No default render device: {ex.Message}");
             }
             return;
@@ -133,6 +144,7 @@ public sealed class HeartbeatService : IDisposable
         // heartbeat bound to the old device and start fresh on the new one.
         StopHeartbeat("device changed");
         Rebind(device);
+        _reportedNoDevice = false;
         Report($"Watching device: {SafeFriendlyName(device)}");
         _lastRealAudioUtc = DateTime.UtcNow;
         _idle = false;
@@ -255,10 +267,8 @@ public sealed class HeartbeatService : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        _meterTimer.Stop();
-        _meterTimer.Dispose();
-        _deviceTimer.Stop();
-        _deviceTimer.Dispose();
+        _meterTimer?.Dispose();
+        _deviceTimer?.Dispose();
         StopHeartbeat("shutting down");
         Rebind(null);
         _enumerator.Dispose();

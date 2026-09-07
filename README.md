@@ -13,7 +13,7 @@ pop/crackle.
 
 ## What it does
 
-A tiny WinForms tray app that keeps a silent WASAPI shared-mode stream open
+A tiny Win32 tray app that keeps a silent WASAPI shared-mode stream open
 on the default output device. That keeps the Bluetooth link "busy" instead
 of idle, so it never renegotiates, so there's nothing to crackle when your
 real audio starts after a gap. Mixing zeros alongside real audio costs
@@ -38,7 +38,9 @@ BTHeartbeat.exe [--idle-timeout <seconds>] [--debug-meter]
   heartbeat is released. `0` disables the release entirely (heartbeat runs
   as long as the app does). Default: `900` (15 minutes).
 - `--debug-meter`: log the raw endpoint meter reading on every tick to
-  stderr. Only useful under `dotnet run` when diagnosing idle detection.
+  stderr, for diagnosing idle detection. The published exe is a GUI binary
+  with no console attached, so this is only visible under `dotnet run` or
+  with stderr redirected: `BTHeartbeat.exe --debug-meter 2> log.txt`.
 
 ## Download
 
@@ -63,12 +65,21 @@ Run key) and Exit.
 ## Publish a standalone build
 
 ```
-dotnet publish -c Release -r win-x64 --self-contained false -o publish
+dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
 ```
 
-Produces `publish/BTHeartbeat.exe`: no console window, tray icon only.
-Run it once and tick "Start with Windows" in the tray menu to have it
-launch on login.
+Produces `publish/BTHeartbeat.exe`: no console window, tray icon only,
+about 13MB. Run it once and tick "Start with Windows" in the tray menu to
+have it launch on login.
+
+The project sets `PublishTrimmed`, which is what keeps that number down
+(untrimmed it is 68MB). Trimming is safe only because of NAudio 3's
+source-generated COM interop. If the NAudio reference is ever moved back to
+2.x, trimming must come off with it: the 2.x trimmed build still starts and
+shows a tray icon, but every WASAPI call fails and no heartbeat runs. Check a
+trimmed build by hovering the tray icon: it must read "Heartbeat ON", not
+"starting..." or "No default render device". The process staying alive proves
+nothing on its own.
 
 ## Design notes
 
@@ -86,7 +97,15 @@ launch on login.
   on a background COM (MTA) thread, and touching `MMDevice`/`WasapiOut`
   objects created on the main STA thread from there fails with
   `QueryInterface` `E_NOINTERFACE` on `IMMDevice`. Everything runs on the
-  STA UI thread via WinForms Timers instead.
+  STA thread that owns the message loop, driven by `WM_TIMER`.
+- **No WinForms.** The tray icon, menu, timers and message loop are plain
+  Win32 (`TrayShell.cs`), because Windows Forms drags the whole
+  WindowsDesktop runtime pack into a self-contained publish and supports
+  neither trimming nor Native AOT. Nothing here ever
+  created a `Form`, so the only things to replace were `Shell_NotifyIcon`,
+  `TrackPopupMenuEx`, `SetTimer` and `GetMessage`. The interop is
+  source-generated (`LibraryImport`) with a `[UnmanagedCallersOnly]` window
+  procedure, so no P/Invoke stub is built at runtime.
 - **Silence threshold is 1e-4, not 0.** Some audio engines / enhancement
   APOs add dither or a noise floor to the meter. On the test machine the
   meter reads an exact `0.000000` when nothing is playing, but a hard zero
