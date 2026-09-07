@@ -18,14 +18,14 @@ jobs:
         with:
           dotnet-version: "9.0.x"
 
-      - name: Publish self-contained single-file exe
+      # PublishAot lives in the csproj. It implies self-contained and emits a single
+      # native exe, so PublishSingleFile / IncludeNativeLibrariesForSelfExtract have
+      # nothing left to do here.
+      - name: Publish native AOT exe
         run: >
           dotnet publish BTHeartbeat/BTHeartbeat.csproj
           -c Release
           -r win-x64
-          --self-contained true
-          -p:PublishSingleFile=true
-          -p:IncludeNativeLibrariesForSelfExtract=true
           -o publish
 
       - name: Report exe size
