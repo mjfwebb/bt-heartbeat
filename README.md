@@ -102,7 +102,7 @@ default render device". The process staying alive proves nothing on its own.
   enum per tick. COM objects are only created on rare transitions (start,
   device change, idle release/resume), each with one owner that disposes it.
 - **Polling, not COM callbacks.** WASAPI session/device notifications fire
-  on a background COM (MTA) thread, and touching `MMDevice`/`WasapiOut`
+  on a background COM (MTA) thread, and touching `MMDevice`/`WasapiPlayer`
   objects created on the main STA thread from there fails with
   `QueryInterface` `E_NOINTERFACE` on `IMMDevice`. Everything runs on the
   STA thread that owns the message loop, driven by `WM_TIMER`.

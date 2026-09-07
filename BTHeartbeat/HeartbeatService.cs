@@ -30,7 +30,7 @@ namespace BTHeartbeat;
 ///    idle release/resume), and each one has a single owner that disposes it.
 ///  - All WASAPI calls happen on the STA UI thread via message-pump timers (see
 ///    <see cref="ITimerScheduler"/>). COM callbacks (session/device notifications)
-///    arrive on an MTA thread, and touching STA-created MMDevice/WasapiOut objects
+///    arrive on an MTA thread, and touching STA-created MMDevice/WasapiPlayer objects
 ///    from there fails with E_NOINTERFACE, so we poll instead of subscribing.
 /// </summary>
 public sealed class HeartbeatService : IDisposable
@@ -61,9 +61,9 @@ public sealed class HeartbeatService : IDisposable
     private AudioMeterInformation? _meter;
     private string? _boundDeviceId;
 
-    // Heartbeat stream. Has its own MMDevice instance so WasapiOut's lifetime is
+    // Heartbeat stream. Has its own MMDevice instance so the player's lifetime is
     // independent of _device and of NAudio's internal AudioClient caching.
-    private WasapiOut? _heartbeatOut;
+    private WasapiPlayer? _heartbeatPlayer;
     private MMDevice? _heartbeatDevice;
 
     private DateTime _lastRealAudioUtc = DateTime.UtcNow;
@@ -166,9 +166,9 @@ public sealed class HeartbeatService : IDisposable
         if (_device is null || _meter is null) return;
 
         // If the stream died underneath us (device error, format renegotiation),
-        // WasapiOut stops on its own thread and PlaybackState leaves Playing.
+        // WasapiPlayer stops on its own thread and PlaybackState leaves Playing.
         // Tear it down here so the restart logic below can bring it back.
-        if (_heartbeatOut != null && _heartbeatOut.PlaybackState != PlaybackState.Playing)
+        if (_heartbeatPlayer != null && _heartbeatPlayer.PlaybackState != PlaybackState.Playing)
         {
             StopHeartbeat("stream stopped unexpectedly");
         }
@@ -181,7 +181,7 @@ public sealed class HeartbeatService : IDisposable
 
         if (DebugMeter)
         {
-            Console.Error.WriteLine($"[BTHeartbeat] meter peak={peak:0.000000} realAudio={realAudio} idle={_idle} heartbeat={(_heartbeatOut != null ? "on" : "off")}");
+            Console.Error.WriteLine($"[BTHeartbeat] meter peak={peak:0.000000} realAudio={realAudio} idle={_idle} heartbeat={(_heartbeatPlayer != null ? "on" : "off")}");
         }
 
         if (realAudio)
@@ -199,7 +199,7 @@ public sealed class HeartbeatService : IDisposable
             StopHeartbeat($"idle for {IdleTimeout.TotalMinutes:0.#} min, letting headset sleep");
         }
 
-        if (!_idle && _heartbeatOut is null)
+        if (!_idle && _heartbeatPlayer is null)
         {
             StartHeartbeat();
         }
@@ -207,23 +207,32 @@ public sealed class HeartbeatService : IDisposable
 
     private void StartHeartbeat()
     {
-        if (_heartbeatOut != null || _boundDeviceId is null) return;
+        if (_heartbeatPlayer != null || _boundDeviceId is null) return;
 
         MMDevice? device = null;
-        WasapiOut? output = null;
+        WasapiPlayer? player = null;
         try
         {
             device = _enumerator.GetDevice(_boundDeviceId);
-            output = new WasapiOut(device, AudioClientShareMode.Shared, true, 100);
-            output.Init(new SilenceProvider(new WaveFormat(48000, 16, 2)));
-            output.Play();
-            _heartbeatOut = output;
+            // Shared mode, event sync, 100ms: the same stream WasapiOut opened before
+            // this moved to WasapiPlayer. Deliberately not low latency - a heartbeat of
+            // zeros has no deadline to meet, and IAudioClient3 would only pin the engine
+            // to a smaller period and wake this process more often for nothing.
+            player = new WasapiPlayerBuilder()
+                .WithDevice(device)
+                .WithSharedMode()
+                .WithEventSync()
+                .WithLatency(100)
+                .Build();
+            player.Init(new SilenceProvider(new WaveFormat(48000, 16, 2)));
+            player.Play();
+            _heartbeatPlayer = player;
             _heartbeatDevice = device;
             Report("Heartbeat ON (silent stream keeping link alive)");
         }
         catch (Exception ex)
         {
-            output?.Dispose();
+            player?.Dispose();
             device?.Dispose();
             Report($"Failed to start heartbeat: {ex.Message}");
         }
@@ -231,16 +240,16 @@ public sealed class HeartbeatService : IDisposable
 
     private void StopHeartbeat(string reason)
     {
-        if (_heartbeatOut is null) return;
+        if (_heartbeatPlayer is null) return;
         try
         {
-            _heartbeatOut.Stop();
-            _heartbeatOut.Dispose();
+            _heartbeatPlayer.Stop();
+            _heartbeatPlayer.Dispose();
         }
         catch { /* best effort */ }
         finally
         {
-            _heartbeatOut = null;
+            _heartbeatPlayer = null;
             _heartbeatDevice?.Dispose();
             _heartbeatDevice = null;
             Report($"Heartbeat OFF ({reason})");
