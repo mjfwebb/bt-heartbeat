@@ -5,18 +5,46 @@
     <TargetFramework>net9.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-
-    <!-- No UseWindowsForms: the tray UI is Win32 (see TrayShell.cs). Dropping it drops
-         the Microsoft.WindowsDesktop.App runtime pack from the self-contained publish,
-         and is what makes Native AOT possible at all - WinForms does not support it.
-         Native AOT is still blocked on NAudio 2.2.1's [ComImport] interop; NAudio 3.0
-         moved to [GeneratedComInterface] and marks itself IsAotCompatible. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+
+    <!-- No localised UI and no culture-sensitive parsing (CLI args already parse with
+         InvariantCulture), so drop the ICU data from the self-contained publish. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!-- Trimming takes the self-contained publish from 68MB to 13MB. It is safe only
+         because of the NAudio 3 upgrade below: on NAudio 2.2.1 the trimmed build still
+         started and sat in the tray, but every WASAPI call failed, so the heartbeat
+         never ran. That failure was silent (PollDevice returns without reporting while
+         no device is bound yet), which is why it needs saying here.
+
+         Kept on the project rather than the release workflow so a local publish
+         produces the same binary CI does. Verify a trimmed build by running it and
+         checking for "Heartbeat ON" plus a loaded AudioSes.dll; process liveness alone
+         does not distinguish a working build from the failure above. -->
+    <PublishTrimmed>true</PublishTrimmed>
+
+    <!-- Name the offending call site instead of the per-assembly IL2104 summary, so a
+         future dependency bump that reintroduces reflection is visible in the log. -->
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+
+    <!-- Not PublishAot. It needs the MSVC toolchain, which rules out verifying it
+         anywhere but CI, and buys only a few MB over trimming plus a faster cold start.
+         NAudio 3 removes the interop blocker, so it is available if that trade changes. -->
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="NAudio" Version="2.2.1" />
+    <!-- NAudio.Wasapi, not the NAudio metapackage: on the net*-windows leg the
+         metapackage depends on NAudio.WinForms, whose FrameworkReference pulls
+         Microsoft.WindowsDesktop.App back into the publish transitively - undoing
+         the point of removing WinForms from this project.
+
+         3.x, not 2.2.1, because NAudio 3 moved its COM interop from [ComImport] to
+         [GeneratedComInterface]. Built-in COM is not trim compatible; source-generated
+         COM is. WasapiOut still exists here and is [Obsolete] in favour of
+         WasapiPlayerBuilder, so this upgrade needs no code change; migrating to
+         WasapiPlayer is a separate job. -->
+    <PackageReference Include="NAudio.Wasapi" Version="3.1.0" />
   </ItemGroup>
 
 </Project>

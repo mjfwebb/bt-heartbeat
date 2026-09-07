@@ -28,6 +28,10 @@ jobs:
           -p:IncludeNativeLibrariesForSelfExtract=true
           -o publish
 
+      - name: Report exe size
+        shell: pwsh
+        run: '"{0:N1} MB" -f ((Get-Item publish/BTHeartbeat.exe).Length / 1MB)'
+
       - name: Zip artifact
         shell: pwsh
         run: Compress-Archive -Path publish/BTHeartbeat.exe -DestinationPath BTHeartbeat-${{ github.ref_name }}-win-x64.zip
