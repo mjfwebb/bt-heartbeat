@@ -1,11 +1,18 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net9.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
-    <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- No UseWindowsForms: the tray UI is Win32 (see TrayShell.cs). Dropping it drops
+         the Microsoft.WindowsDesktop.App runtime pack from the self-contained publish,
+         and is what makes Native AOT possible at all - WinForms does not support it.
+         Native AOT is still blocked on NAudio 2.2.1's [ComImport] interop; NAudio 3.0
+         moved to [GeneratedComInterface] and marks itself IsAotCompatible. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
   <ItemGroup>

@@ -1,7 +1,5 @@
 using System;
 using System.Globalization;
-using System.Threading;
-using System.Windows.Forms;
 using Microsoft.Win32;
 
 namespace BTHeartbeat;
@@ -10,58 +8,28 @@ internal static class Program
 {
     private static readonly TimeSpan DefaultIdleTimeout = TimeSpan.FromMinutes(15);
 
+    /// <summary>
+    /// STA is not about UI here: the WASAPI COM objects in HeartbeatService are
+    /// STA-affined, and every one of them is created and touched on this thread.
+    /// </summary>
     [STAThread]
     private static void Main(string[] args)
     {
-        ApplicationConfiguration.Initialize();
+        using var shell = new TrayShell("BT Heartbeat")
+        {
+            IsStartupChecked = IsStartupEnabled,
+            OnStartupToggled = SetStartup,
+        };
 
-        // Install our own sync context rather than relying on SynchronizationContext.Current.
-        // NotifyIcon's window is a raw NativeWindow, not a Control, so it isn't
-        // guaranteed to auto-install one, and a null context here means every later
-        // Post() silently no-ops, leaving the tray text stuck on "starting...".
-        var uiContext = new WindowsFormsSynchronizationContext();
-        SynchronizationContext.SetSynchronizationContext(uiContext);
-
-        using var service = new HeartbeatService(ParseIdleTimeout(args))
+        using var service = new HeartbeatService(shell, ParseIdleTimeout(args))
         {
             DebugMeter = Array.Exists(args, a => a.Equals("--debug-meter", StringComparison.OrdinalIgnoreCase)),
         };
-        using var trayIcon = new NotifyIcon
-        {
-            Icon = System.Drawing.SystemIcons.Information,
-            Text = "BT Heartbeat: starting...",
-            Visible = true,
-        };
 
-        var menu = new ContextMenuStrip();
-        var statusItem = new ToolStripMenuItem("Status: starting...") { Enabled = false };
-        var startupItem = new ToolStripMenuItem("Start with Windows")
-        {
-            CheckOnClick = true,
-            Checked = IsStartupEnabled(),
-        };
-        startupItem.Click += (_, _) => SetStartup(startupItem.Checked);
-        var exitItem = new ToolStripMenuItem("Exit");
-        exitItem.Click += (_, _) => Application.Exit();
-        menu.Items.Add(statusItem);
-        menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add(startupItem);
-        menu.Items.Add(exitItem);
-        trayIcon.ContextMenuStrip = menu;
-
-        service.StatusChanged += message =>
-        {
-            // NotifyIcon/menu updates must happen on the UI thread.
-            uiContext.Post(_ =>
-            {
-                trayIcon.Text = Truncate($"BT Heartbeat: {message}", 63); // NotifyIcon.Text max length
-                statusItem.Text = $"Status: {message}";
-            }, null);
-        };
-
+        service.StatusChanged += shell.SetStatus;
         service.Start();
 
-        Application.Run();
+        shell.Run();
     }
 
     /// <summary>
@@ -82,8 +50,6 @@ internal static class Program
         }
         return DefaultIdleTimeout;
     }
-
-    private static string Truncate(string s, int max) => s.Length <= max ? s : s[..max];
 
     // ---- startup registration (HKCU Run key, same approach as the other tray apps)
 
@@ -109,13 +75,15 @@ internal static class Program
         {
             using var k = Registry.CurrentUser.OpenSubKey(RunKey, writable: true);
             if (k is null) return;
-            if (enable) k.SetValue(RunValue, $"\"{Application.ExecutablePath}\"");
+            // Environment.ProcessPath is the apphost path, same value Application.ExecutablePath
+            // returned, and it stays correct under single-file publish.
+            if (enable) k.SetValue(RunValue, $"\"{Environment.ProcessPath}\"");
             else k.DeleteValue(RunValue, throwOnMissingValue: false);
         }
         catch
         {
-            // Registry access denied or similar: leave the checkbox as the user set it;
-            // it will re-read the real state next launch.
+            // Registry access denied or similar: the menu re-reads the real state
+            // every time it opens, so a failed write simply shows up unchecked.
         }
     }
 }
