@@ -46,9 +46,9 @@
 
          3.x, not 2.2.1, because NAudio 3 moved its COM interop from [ComImport] to
          [GeneratedComInterface]. Built-in COM is not trim compatible; source-generated
-         COM is. WasapiOut still exists here and is [Obsolete] in favour of
-         WasapiPlayerBuilder, so this upgrade needs no code change; migrating to
-         WasapiPlayer is a separate job. -->
+         COM is. The heartbeat stream is opened through WasapiPlayerBuilder (see
+         HeartbeatService.StartHeartbeat); the [Obsolete] WasapiOut it replaced is
+         still present in 3.x, so a rollback to that call is a local change. -->
     <PackageReference Include="NAudio.Wasapi" Version="3.1.0" />
   </ItemGroup>
 
