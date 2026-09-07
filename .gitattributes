@@ -1,1 +1,19 @@
-* text=auto
+# Normalise every text file to LF in the repository. Without this, whether a
+# commit lands as LF or CRLF depends on each machine's core.autocrlf, which is
+# how a whitespace-only diff of an entire file happens.
+#
+# eol=crlf pins the working copy too, rather than leaving it to core.autocrlf:
+# this is a Windows-only app, and pinning it means a checkout is identical on
+# every machine and there is no "LF will be replaced by CRLF" warning on commit.
+* text=auto eol=crlf
+
+# Shell scripts must keep LF even on Windows: CRLF breaks the shebang line and
+# gives "bad interpreter" under Git Bash, WSL and CI containers.
+*.sh text eol=lf
+
+# Binaries git must never touch. None are tracked today; these are here so
+# adding a tray icon or a screenshot cannot corrupt it through normalisation.
+*.ico binary
+*.png binary
+*.zip binary
+*.exe binary
