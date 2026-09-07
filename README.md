@@ -69,7 +69,7 @@ dotnet publish -c Release -r win-x64 -o publish
 ```
 
 Produces `publish/BTHeartbeat.exe`: no console window, tray icon only,
-about 13MB. Run it once and tick "Start with Windows" in the tray menu to
+about 2MB. Run it once and tick "Start with Windows" in the tray menu to
 have it launch on login.
 
 The project sets `PublishAot`, so this is a native compilation: a single exe
@@ -78,14 +78,16 @@ with no .NET runtime to carry. It needs the Visual Studio C++ build tools
 already has them. Native code cannot be cross-compiled, so the release build
 needs a Windows machine, which this app requires anyway.
 
-Trimming stays on underneath (`PublishAot` implies it, and untrimmed the
-build is 68MB). Trimming is safe only because of NAudio 3's
-source-generated COM interop. If the NAudio reference is ever moved back to
-2.x, trimming must come off with it: the 2.x trimmed build still starts and
-shows a tray icon, but every WASAPI call fails and no heartbeat runs. Check a
-trimmed build by hovering the tray icon: it must read "Heartbeat ON", not
-"starting..." or "No default render device". The process staying alive proves
-nothing on its own.
+For reference, the same app was 68MB self-contained, 13MB trimmed, and 2.1MB
+with AOT.
+
+AOT and trimming (which `PublishAot` implies) are both safe only because of
+NAudio 3's source-generated COM interop. If the NAudio reference is ever moved
+back to 2.x, both must come off with it: built-in `[ComImport]` interop
+survives neither, and the resulting build still starts and shows a tray icon
+while every WASAPI call fails and no heartbeat runs. Check such a build by
+hovering the tray icon: it must read "Heartbeat ON", not "starting..." or "No
+default render device". The process staying alive proves nothing on its own.
 
 ## Design notes
 
