@@ -12,9 +12,13 @@ jobs:
   build-and-release:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      # Actions are pinned to a commit SHA, not a tag: a tag is mutable, so `@v7`
+      # silently re-points at whatever that repo tags next, and this job holds
+      # `contents: write`. The trailing comment is the human-readable version; bump
+      # both together, taking the SHA from the release rather than the moving major tag.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: "9.0.x"
 
