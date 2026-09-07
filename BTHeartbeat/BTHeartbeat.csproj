@@ -24,13 +24,18 @@
          does not distinguish a working build from the failure above. -->
     <PublishTrimmed>true</PublishTrimmed>
 
+    <!-- Native AOT, on top of trimming. Possible because there is no WinForms here
+         (see TrayShell.cs) and because NAudio 3's COM interop is source-generated;
+         both blocked it. PublishAot implies trimming, so PublishTrimmed above is
+         redundant while this is on - it is kept so that removing this one line falls
+         back to the shipped v0.3.0 configuration rather than to an untrimmed build. -->
+    <PublishAot>true</PublishAot>
+    <IsAotCompatible>true</IsAotCompatible>
+
     <!-- Name the offending call site instead of the per-assembly IL2104 summary, so a
          future dependency bump that reintroduces reflection is visible in the log. -->
     <TrimmerSingleWarn>false</TrimmerSingleWarn>
 
-    <!-- Not PublishAot. It needs the MSVC toolchain, which rules out verifying it
-         anywhere but CI, and buys only a few MB over trimming plus a faster cold start.
-         NAudio 3 removes the interop blocker, so it is available if that trade changes. -->
   </PropertyGroup>
 
   <ItemGroup>
